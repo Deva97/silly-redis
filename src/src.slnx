@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ServerTest/ServerTest.csproj" />
+  <Project Path="sillyredis/sillyredis.csproj" />
+</Solution>

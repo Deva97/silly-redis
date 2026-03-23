@@ -1,0 +1,15 @@
+/workspaces/silly-redis/src/sillyredis/bin/Debug/net10.0/sillyredis
+/workspaces/silly-redis/src/sillyredis/bin/Debug/net10.0/sillyredis.deps.json
+/workspaces/silly-redis/src/sillyredis/bin/Debug/net10.0/sillyredis.runtimeconfig.json
+/workspaces/silly-redis/src/sillyredis/bin/Debug/net10.0/sillyredis.dll
+/workspaces/silly-redis/src/sillyredis/bin/Debug/net10.0/sillyredis.pdb
+/workspaces/silly-redis/src/sillyredis/obj/Debug/net10.0/sillyredis.GeneratedMSBuildEditorConfig.editorconfig
+/workspaces/silly-redis/src/sillyredis/obj/Debug/net10.0/sillyredis.AssemblyInfoInputs.cache
+/workspaces/silly-redis/src/sillyredis/obj/Debug/net10.0/sillyredis.AssemblyInfo.cs
+/workspaces/silly-redis/src/sillyredis/obj/Debug/net10.0/sillyredis.csproj.CoreCompileInputs.cache
+/workspaces/silly-redis/src/sillyredis/obj/Debug/net10.0/sillyredis.sourcelink.json
+/workspaces/silly-redis/src/sillyredis/obj/Debug/net10.0/sillyredis.dll
+/workspaces/silly-redis/src/sillyredis/obj/Debug/net10.0/refint/sillyredis.dll
+/workspaces/silly-redis/src/sillyredis/obj/Debug/net10.0/sillyredis.pdb
+/workspaces/silly-redis/src/sillyredis/obj/Debug/net10.0/sillyredis.genruntimeconfig.cache
+/workspaces/silly-redis/src/sillyredis/obj/Debug/net10.0/ref/sillyredis.dll
