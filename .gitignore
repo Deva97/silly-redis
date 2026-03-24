@@ -2,27 +2,32 @@
 bin/
 obj/
 
+# Binaries (extra safety, usually redundant)
+*.dll
+*.exe
+*.pdb
+*.app
+*.ipa
+
 # User-specific files
 *.user
 *.userosscache
 *.suo
 
-# Rider / VS Code / VS
-.idea/
-.vscode/
-*.code-workspace
-
-# Visual Studio cache
+# IDEs
 .vs/
+.vscode/
+.idea/
+*.code-workspace
 
 # Logs
 *.log
 
-# OS generated files
+# OS files
 .DS_Store
 Thumbs.db
 
-# Environment files
+# Environment
 .env
 .env.*
 
@@ -31,10 +36,8 @@ Thumbs.db
 packages/
 .nuget/
 
-# Test results
+# Test / Coverage
 TestResults/
-
-# Coverage reports
 coverage/
 *.coverage
 *.coveragexml
@@ -42,7 +45,7 @@ coverage/
 # Publish output
 publish/
 
-# Temporary files
+# Temp files
 *.tmp
 *.temp
 
@@ -53,12 +56,12 @@ _ReSharper*/
 # Dotnet tools
 .dotnet-tools.json
 
-# Runtime files
+# Runtime config (dev only)
 *.runtimeconfig.dev.json
 
-# JetBrains Rider
+# Rider
 *.sln.iml
 
-# Backup files
+# Backups
 *.bak
 *.swp
