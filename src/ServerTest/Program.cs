@@ -27,23 +27,18 @@ async Task ClientWorker(int clientId)
         {
             var message = $"PING {clientId}:{req}\r\n";
             var messageBytes = Encoding.UTF8.GetBytes(message);
-
-            var stopwatch = Stopwatch.StartNew();
             await stream.WriteAsync(messageBytes);
 
             var buffer = new byte[1024];
             var bytesRead = await stream.ReadAsync(buffer);
-            stopwatch.Stop();
 
             var response = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
             lock (latencies)
             {
-                latencies.Add(stopwatch.Elapsed.TotalMilliseconds);
                 successCount++;
             }
-
-            Console.WriteLine($"[Client {clientId:D2}] Req {req:D2} -> {response} ({stopwatch.Elapsed.TotalMilliseconds:F2}ms)");
-        }
+            Console.WriteLine($"[Client {clientId:D2}] Request {req}: Received '{response}'");
+    }
     }
     catch (Exception e)
     {
@@ -57,7 +52,6 @@ async Task ClientWorker(int clientId)
 
 try
 {
-    var testStopwatch = Stopwatch.StartNew();
     Console.WriteLine($"Starting {numClients} concurrent clients with {requestsPerClient} requests each\n");
 
     var tasks = new List<Task>();
@@ -67,20 +61,10 @@ try
     }
 
     await Task.WhenAll(tasks);
-    testStopwatch.Stop();
 
     Console.WriteLine($"\n=== Test Results ===");
-    Console.WriteLine($"Total time: {testStopwatch.ElapsedMilliseconds}ms");
     Console.WriteLine($"Successful requests: {successCount}");
     Console.WriteLine($"Failed requests: {errorCount}");
-
-    if (latencies.Count > 0)
-    {
-        Console.WriteLine($"Avg latency: {latencies.Average():F2}ms");
-        Console.WriteLine($"Min latency: {latencies.Min():F2}ms");
-        Console.WriteLine($"Max latency: {latencies.Max():F2}ms");
-        Console.WriteLine($"Throughput: {(double)successCount / (testStopwatch.ElapsedMilliseconds / 1000):F2} req/sec");
-    }
 }
 catch (Exception e)
 {

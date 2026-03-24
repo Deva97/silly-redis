@@ -9,10 +9,10 @@ This project is a minimal Redis-like server that focuses on low-level networking
 ## Implementation Approach
 
 The implementation was developed incrementally by following a structured, hands-on approach.
-
 Key reference:
 
 * https://app.codecrafters.io/
+* https://rohitpaulk.com/articles/redis-0
 
 ## Goals
 
