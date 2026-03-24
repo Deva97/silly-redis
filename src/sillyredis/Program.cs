@@ -21,19 +21,10 @@ try
         _ = HandleClientAsync(acceptClinet, token);
 
     }
-    await using var stream =  acceptClinet.GetStream();
-    var message = "+PONG\r\n";
-    var messageBytes = Encoding.UTF8.GetBytes(message);
-   
-    var buffer = new byte[1024];
-    while(true)
-    {
-        await stream.WriteAsync(messageBytes, cancellationToken: token);
-    }
 }
 catch(OperationCanceledException e)
 {
-    
+    failedTask.Add($"Server stopped: {e.Message}");
 }
 finally
 {
@@ -51,9 +42,12 @@ async Task HandleClientAsync(TcpClient client, CancellationToken token)
         var buffer = new byte[1024];
         while (!token.IsCancellationRequested)
         {
+
+            // Read request and break if client disconnected
             var bytesRead = await stream.ReadAsync(buffer, token);
             if (bytesRead == 0) break;
 
+            // Read request and respond with PONG
             var request = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
             Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Received: {request}");
             await stream.WriteAsync(messageBytes, token);
