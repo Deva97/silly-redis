@@ -1,61 +1,67 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Sockets;
-using System.Reflection.Metadata;
-using System.Runtime.CompilerServices;
 using System.Text;
 
 var ipAddress = IPAddress.Parse("127.0.0.1");
 var server = new TcpListener(ipAddress, 6379);
 server.Start();
-var source = new CancellationTokenSource();
-var token = source.Token;
 
-var failedTask = new List<string>();
+using var source = new CancellationTokenSource();
+var token = source.Token;
+var clientTasks = new List<Task>();
 
 try
 {
     while (!token.IsCancellationRequested)
     {
-        using var acceptClinet = await server.AcceptTcpClientAsync(token);
-
-        _ = HandleClientAsync(acceptClinet, token);
-
+        var acceptedClient = await server.AcceptTcpClientAsync(token);
+        clientTasks.Add(HandleClientAsync(acceptedClient, token));
     }
 }
-catch(OperationCanceledException e)
+catch (OperationCanceledException)
 {
-    failedTask.Add($"Server stopped: {e.Message}");
+    // Expected when cancellation is requested.
 }
 finally
 {
     server.Stop();
+
+    if (clientTasks.Count > 0)
+    {
+        await Task.WhenAll(clientTasks);
+    }
 }
 
-async Task HandleClientAsync(TcpClient client, CancellationToken token)
+async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
 {
     try
     {
         Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Connected");
         await using var stream = client.GetStream();
-        var message = "+PONG\r\n";
-        var messageBytes = Encoding.UTF8.GetBytes(message);
+        var pongResponseBytes = Encoding.UTF8.GetBytes("+PONG\r\n");
         var buffer = new byte[1024];
-        while (!token.IsCancellationRequested)
+
+        while (!cancellationToken.IsCancellationRequested)
         {
+            var bytesRead = await stream.ReadAsync(buffer, cancellationToken);
+            if (bytesRead == 0)
+            {
+                break;
+            }
 
-            // Read request and break if client disconnected
-            var bytesRead = await stream.ReadAsync(buffer, token);
-            if (bytesRead == 0) break;
-
-            // Read request and respond with PONG
             var request = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
             Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Received: {request}");
-            await stream.WriteAsync(messageBytes, token);
+
+            await stream.WriteAsync(pongResponseBytes, cancellationToken);
         }
     }
-    catch (Exception e)
+    catch (OperationCanceledException)
     {
-        Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] ERROR: {e.Message}");
+        // Ignore cancellation exceptions during shutdown.
+    }
+    catch (Exception exception)
+    {
+        Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] ERROR: {exception.Message}");
     }
     finally
     {
