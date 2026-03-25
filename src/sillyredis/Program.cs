@@ -3,54 +3,98 @@ using System.Net.Sockets;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Buffers;
 
 var ipAddress = IPAddress.Parse("127.0.0.1");
 var server = new TcpListener(ipAddress, 6379);
 server.Start();
+
+var ClientListHandlers = new List<Task>();
+
 var source = new CancellationTokenSource();
 var token = source.Token;
 
 var failedTask = new List<string>();
 
+//Ecode Bulk String for RESP protocol
+string EncodeBulkString(string[] args)
+{
+    var sb = new StringBuilder();
+    sb.Append($"*{args.Length}\r\n");
+    foreach (var arg in args)
+    {
+        sb.Append($"${arg.Length}\r\n{arg}\r\n");
+    }
+
+    return sb.ToString();
+}
+
+//Response based on command
+string Response(string[] args)
+{
+    return args[0].ToUpper() switch
+    {
+        "PING" => "+PONG\r\n",
+        "ECHO" => EncodeBulkString(args[1..]),
+        _ => "-ERR unknown command\r\n"
+    };
+}
+
+//Parse RESP protocol request
+string ParseResp(string request)
+{
+    var lines = request.Split("\r\n", StringSplitOptions.RemoveEmptyEntries).
+                Where(lines => !(lines.StartsWith('$') || lines.StartsWith('*'))).
+                Select(lines => lines.Trim());
+
+    return string.Join(' ', lines);
+}
+
 try
 {
     while (!token.IsCancellationRequested)
     {
-        using var acceptClinet = await server.AcceptTcpClientAsync(token);
+        var acceptClinet = await server.AcceptTcpClientAsync(token);
 
         _ = HandleClientAsync(acceptClinet, token);
 
     }
 }
-catch(OperationCanceledException e)
+catch(Exception e)
 {
     failedTask.Add($"Server stopped: {e.Message}");
 }
 finally
 {
+    source.Cancel();
     server.Stop();
+    System.Console.WriteLine("Server stopped.");
 }
 
 async Task HandleClientAsync(TcpClient client, CancellationToken token)
 {
+    byte[]? buffer = null;
     try
     {
         Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Connected");
         await using var stream = client.GetStream();
-        var message = "+PONG\r\n";
-        var messageBytes = Encoding.UTF8.GetBytes(message);
-        var buffer = new byte[1024];
+        buffer = ArrayPool<byte>.Shared.Rent(1024);
+
         while (!token.IsCancellationRequested)
         {
 
             // Read request and break if client disconnected
             var bytesRead = await stream.ReadAsync(buffer, token);
-            if (bytesRead == 0) break;
-
-            // Read request and respond with PONG
+            if (bytesRead == 0) {System.Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Client disconnected no data"); break;}
             var request = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-            Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Received: {request}");
+            var decodedRequest = ParseResp(request);
+            Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Received: {decodedRequest}");
+
+            //respind to client
+            var message = Response(decodedRequest.Split(' '));
+            var messageBytes = Encoding.UTF8.GetBytes(message);
             await stream.WriteAsync(messageBytes, token);
+            await stream.FlushAsync(token);
         }
     }
     catch (Exception e)
@@ -61,5 +105,10 @@ async Task HandleClientAsync(TcpClient client, CancellationToken token)
     {
         Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Disconnected");
         client.Close();
+        if (buffer != null)
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+            buffer = null;
+        }
     }
 }

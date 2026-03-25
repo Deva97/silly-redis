@@ -13,11 +13,51 @@ var successCount = 0;
 var errorCount = 0;
 var latencies = new List<double>();
 
+
+//Ecode Bulk String for RESP protocol
+string EncodeBulkString(string[] args)
+{
+    var sb = new StringBuilder();
+    sb.Append($"*{args.Length}\r\n");
+    foreach (var arg in args)
+    {
+        sb.Append($"${arg.Length}\r\n{arg}\r\n");
+    }
+
+    return sb.ToString();
+}
+
+//Response based on command
+string Response(string[] args)
+{
+    return args[0].ToUpper() switch
+    {
+        "PING" => "+PONG\r\n",
+        "ECHO" => EncodeBulkString(args),
+        _ => "-ERR unknown command\r\n"
+    };
+}
+
+//Parse RESP protocol request
+string ParseResp(string request)
+{
+    var lines = request.Split("\r\n", StringSplitOptions.RemoveEmptyEntries).
+                Where(lines => !(lines.StartsWith('$') || lines.StartsWith('*'))).
+                Select(lines => lines.Trim()).ToArray();
+
+    return string.Join(' ', lines);
+}
+
+
 async Task ClientWorker(int clientId)
 {
+    var source = new CancellationTokenSource();
+    var token = source.Token;
+
+    using var client = new TcpClient();
     try
     {
-        using var client = new TcpClient();
+       
         await client.ConnectAsync(ipAddress, 6379);
         Console.WriteLine($"[Client {clientId:D2}] Connected");
 
@@ -25,19 +65,23 @@ async Task ClientWorker(int clientId)
 
         for (int req = 1; req <= requestsPerClient; req++)
         {
-            var message = $"PING {clientId}:{req}\r\n";
-            var messageBytes = Encoding.UTF8.GetBytes(message);
-            await stream.WriteAsync(messageBytes);
+            var message = $"ECHO Hello World";
+            var messageBytes = Encoding.UTF8.GetBytes(Response(message.Split(' ')));
+            await stream.WriteAsync(messageBytes, token);
+            await stream.FlushAsync(token);
 
             var buffer = new byte[1024];
-            var bytesRead = await stream.ReadAsync(buffer);
+            var bytesRead = await stream.ReadAsync(buffer, token);
 
             var response = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
             lock (latencies)
             {
                 successCount++;
             }
-            Console.WriteLine($"[Client {clientId:D2}] Request {req}: Received '{response}'");
+
+            var parsedResponse = ParseResp(response);
+
+            Console.WriteLine($"[Client {clientId:D2}] Request {req}: Received '{parsedResponse}'");
     }
     }
     catch (Exception e)
@@ -48,7 +92,16 @@ async Task ClientWorker(int clientId)
             errorCount++;
         }
     }
+    finally
+    {
+        source.Cancel();
+        client.Close();
+        Console.WriteLine($"[Client {clientId:D2}] Disconnected");
+    }
 }
+
+
+
 
 try
 {
