@@ -15,9 +15,13 @@ var latencies = new List<double>();
 
 async Task ClientWorker(int clientId)
 {
+    var source = new CancellationTokenSource();
+    var token = source.Token;
+
+    using var client = new TcpClient();
     try
     {
-        using var client = new TcpClient();
+       
         await client.ConnectAsync(ipAddress, 6379);
         Console.WriteLine($"[Client {clientId:D2}] Connected");
 
@@ -25,18 +29,21 @@ async Task ClientWorker(int clientId)
 
         for (int req = 1; req <= requestsPerClient; req++)
         {
+            System.Console.WriteLine($"[Client {clientId:D2}] request {req} stream.CanWrite: {stream.CanWrite}");
             var message = $"PING {clientId}:{req}\r\n";
             var messageBytes = Encoding.UTF8.GetBytes(message);
-            await stream.WriteAsync(messageBytes);
+            await stream.WriteAsync(messageBytes, token);
+            await stream.FlushAsync(token);
 
             var buffer = new byte[1024];
-            var bytesRead = await stream.ReadAsync(buffer);
+            var bytesRead = await stream.ReadAsync(buffer, token);
 
             var response = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
             lock (latencies)
             {
                 successCount++;
             }
+
             Console.WriteLine($"[Client {clientId:D2}] Request {req}: Received '{response}'");
     }
     }
@@ -48,7 +55,15 @@ async Task ClientWorker(int clientId)
             errorCount++;
         }
     }
+    finally
+    {
+        source.Cancel();
+        client.Close();
+        Console.WriteLine($"[Client {clientId:D2}] Disconnected");
+    }
 }
+    
+
 
 try
 {

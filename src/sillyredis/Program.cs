@@ -7,6 +7,9 @@ using System.Text;
 var ipAddress = IPAddress.Parse("127.0.0.1");
 var server = new TcpListener(ipAddress, 6379);
 server.Start();
+
+var ClientListHandlers = new List<Task>();
+
 var source = new CancellationTokenSource();
 var token = source.Token;
 
@@ -16,19 +19,21 @@ try
 {
     while (!token.IsCancellationRequested)
     {
-        using var acceptClinet = await server.AcceptTcpClientAsync(token);
+        var acceptClinet = await server.AcceptTcpClientAsync(token);
 
         _ = HandleClientAsync(acceptClinet, token);
 
     }
 }
-catch(OperationCanceledException e)
+catch(Exception e)
 {
     failedTask.Add($"Server stopped: {e.Message}");
 }
 finally
 {
+    source.Cancel();
     server.Stop();
+    System.Console.WriteLine("Server stopped.");
 }
 
 async Task HandleClientAsync(TcpClient client, CancellationToken token)
@@ -45,12 +50,13 @@ async Task HandleClientAsync(TcpClient client, CancellationToken token)
 
             // Read request and break if client disconnected
             var bytesRead = await stream.ReadAsync(buffer, token);
-            if (bytesRead == 0) break;
+            if (bytesRead == 0) {System.Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Client disconnected no data"); break;}
 
             // Read request and respond with PONG
             var request = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
             Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Received: {request}");
             await stream.WriteAsync(messageBytes, token);
+            await stream.FlushAsync(token);
         }
     }
     catch (Exception e)
