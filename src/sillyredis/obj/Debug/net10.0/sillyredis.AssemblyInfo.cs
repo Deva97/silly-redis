@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("sillyredis")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4a857aef9e4074f7db811e53cc43807a545831f4")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+564baa87cfdb0619121dc8e077a9e236bf9baffc")]
 [assembly: System.Reflection.AssemblyProductAttribute("sillyredis")]
 [assembly: System.Reflection.AssemblyTitleAttribute("sillyredis")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

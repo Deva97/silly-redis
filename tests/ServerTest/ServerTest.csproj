@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\sillyredis\sillyredis.csproj" />
+    <ProjectReference Include="..\..\src\sillyredis\sillyredis.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
