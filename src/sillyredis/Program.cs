@@ -93,7 +93,9 @@ async Task HandleClientAsync(TcpClient client, CancellationToken token)
 
             // Read request and break if client disconnected
             var bytesRead = await stream.ReadAsync(buffer, token);
-            if (bytesRead == 0) {System.Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Client disconnected no data"); break;}
+            if (bytesRead == 0) break;
+
+            // Read request and respond with PONG
             var request = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
             var decodedRequest = ParseResp(request);
             Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Received: {decodedRequest}");

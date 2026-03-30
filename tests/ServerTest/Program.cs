@@ -47,8 +47,13 @@ async Task ClientWorker(int clientId)
     var token = source.Token;
 
     using var client = new TcpClient();
+    var source = new CancellationTokenSource();
+    var token = source.Token;
+
+    using var client = new TcpClient();
     try
     {
+       
        
         await client.ConnectAsync(ipAddress, 6379);
         Console.WriteLine($"[Client {clientId:D2}] Connected");
@@ -63,6 +68,7 @@ async Task ClientWorker(int clientId)
             await stream.FlushAsync(token);
 
             var buffer = new byte[1024];
+            var bytesRead = await stream.ReadAsync(buffer, token);
             var bytesRead = await stream.ReadAsync(buffer, token);
 
             var response = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
