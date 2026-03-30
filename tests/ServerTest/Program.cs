@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 
 Console.WriteLine("=== TCP Server Concurrent Clients Test ===\n");
@@ -12,6 +13,8 @@ const int requestsPerClient = 5;
 var successCount = 0;
 var errorCount = 0;
 var latencies = new List<double>();
+
+var rand = new Random();
 
 
 //Ecode Bulk String for RESP protocol
@@ -25,17 +28,6 @@ string EncodeBulkString(string[] args)
     }
 
     return sb.ToString();
-}
-
-//Response based on command
-string Response(string[] args)
-{
-    return args[0].ToUpper() switch
-    {
-        "PING" => "+PONG\r\n",
-        "ECHO" => EncodeBulkString(args),
-        _ => "-ERR unknown command\r\n"
-    };
 }
 
 //Parse RESP protocol request
@@ -65,8 +57,8 @@ async Task ClientWorker(int clientId)
 
         for (int req = 1; req <= requestsPerClient; req++)
         {
-            var message = $"ECHO Hello World";
-            var messageBytes = Encoding.UTF8.GetBytes(Response(message.Split(' ')));
+            var message = "SET" + $" {rand.Next(1,100)} {rand.Next(1,100)}";
+            var messageBytes = Encoding.UTF8.GetBytes(EncodeBulkString(message.Split(' ')));
             await stream.WriteAsync(messageBytes, token);
             await stream.FlushAsync(token);
 

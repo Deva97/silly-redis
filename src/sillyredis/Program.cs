@@ -4,7 +4,10 @@ using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Buffers;
+using System.Collections.Concurrent;
 
+
+var registery = new ConcurrentDictionary<string, string>();
 var ipAddress = IPAddress.Parse("127.0.0.1");
 var server = new TcpListener(ipAddress, 6379);
 server.Start();
@@ -36,6 +39,8 @@ string Response(string[] args)
     {
         "PING" => "+PONG\r\n",
         "ECHO" => EncodeBulkString(args[1..]),
+        "SET" => registery.ContainsKey(args[1]) ? "-ERR failed to set value - KEY EXISTS\r\n" : registery.TryAdd(args[1], args[2]) ? "+OK\r\n" : "-ERR failed to set value - UNKNOWN ERROR\r\n",
+        "GET" => registery.TryGetValue(args[1], out var value) ? EncodeBulkString([value]) : "$-1\r\n",
         _ => "-ERR unknown command\r\n"
     };
 }
@@ -56,6 +61,9 @@ try
     {
         var acceptClinet = await server.AcceptTcpClientAsync(token);
 
+        //fire and forget. not using await her since waiting make the system to
+        // to behave in such a way that it can handle only one client at a time. 
+        // we want to handle multiple clients concurrently.
         _ = HandleClientAsync(acceptClinet, token);
 
     }
