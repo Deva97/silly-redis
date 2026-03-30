@@ -18,5 +18,5 @@ Key reference:
 
 * Understand TCP server design in .NET
 * Implement basic RESP (Redis Serialization Protocol) parsing
-* Handle simple commands like `PING`
+* Handle simple commands like `PING`, `ECHO`, `SET`, `GET`
 * Explore concurrency and async patterns
