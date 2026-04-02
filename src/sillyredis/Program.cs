@@ -7,7 +7,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 
 
-var registery = new ConcurrentDictionary<string, string>();
+var registery = new ConcurrentDictionary<string, CachedValue>();
 var ipAddress = IPAddress.Parse("127.0.0.1");
 var server = new TcpListener(ipAddress, 6379);
 server.Start();
@@ -39,8 +39,8 @@ string Response(string[] args)
     {
         "PING" => "+PONG\r\n",
         "ECHO" => EncodeBulkString(args[1..]),
-        "SET" => registery.ContainsKey(args[1]) ? "-ERR failed to set value - KEY EXISTS\r\n" : registery.TryAdd(args[1], args[2]) ? "+OK\r\n" : "-ERR failed to set value - UNKNOWN ERROR\r\n",
-        "GET" => registery.TryGetValue(args[1], out var value) ? EncodeBulkString([value]) : "$-1\r\n",
+        "SET" => setCachedValue(args[1..]),
+        "GET" => getCachedValue(args[1]) != null ? EncodeBulkString(new string[] { getCachedValue(args[1]).Value }) : "$-1\r\n",
         _ => "-ERR unknown command\r\n"
     };
 }
@@ -120,5 +120,66 @@ async Task HandleClientAsync(TcpClient client, CancellationToken token)
             ArrayPool<byte>.Shared.Return(buffer);
             buffer = null;
         }
+    }
+}
+
+
+ string setCachedValue(string[] args)
+{
+    string success = "Key set successfully\r\n";
+    string error = "Key already exists and is not expired\r\n";
+    var key = args[0];
+    var value = args[1];
+    if(args.Length < 4)
+    {
+        registery[key] = new CachedValue(value, DateTime.MaxValue);
+        return success; // Key set successfully without expiration
+    }
+
+    var ttl = int.Parse(args[3]);
+    var format = args[2];
+    ttl = format.ToUpper() == "PX" ? ttl : ttl * 1000; // Convert to milliseconds if format is seconds
+
+    var expiry = DateTime.UtcNow.AddMilliseconds(ttl);
+    if(registery.TryGetValue(key, out var existingValue))
+    {
+        if(existingValue is CachedValue existingCachedValue)
+        {
+            if(existingCachedValue.Expiry > DateTime.UtcNow)
+            {
+                return error; // Key exists and is not expired
+            }
+        }
+    }
+    registery[key] = new CachedValue(value, expiry);
+    return success; // Key set successfully
+}
+
+CachedValue getCachedValue(string key)
+{
+    if(registery.TryGetValue(key, out var existingValue))
+    {
+    
+            if(existingValue.Expiry > DateTime.UtcNow)
+            {
+                return existingValue; // Key exists and is not expired
+            }
+            else
+            {
+                registery.TryRemove(key, out _); // Key is expired, remove it
+            }
+        
+    }
+    return null; // Key does not exist
+}
+
+public class CachedValue
+{
+    public string Value { get; set; }
+    public DateTime Expiry { get; set; }
+    public CachedValue(string value, DateTime expiry)
+    {
+        Value = value;
+        Expiry = expiry;
     }
 }
