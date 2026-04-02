@@ -18,5 +18,20 @@ Key reference:
 
 * Understand TCP server design in .NET
 * Implement basic RESP (Redis Serialization Protocol) parsing
-* Handle simple commands like `PING`, `ECHO`, `SET`, `GET`
+* Handle simple commands like `PING`, `ECHO`, `SET`, `GET`, `RPUSH`, `LPUSH`, `LRANGE`, `LLEN`, `LPOP`
 * Explore concurrency and async patterns
+
+## Implemented Commands
+
+### Key-Value Operations
+* `PING` - Server ping
+* `ECHO` - Echo the given string
+* `SET` - Set the string value of a key (with optional TTL: `EX` for seconds or `PX` for milliseconds)
+* `GET` - Get the value of a key
+
+### List Operations
+* `RPUSH` - Append one or more values to a list (right push)
+* `LPUSH` - Prepend one or more values to a list (left push)
+* `LRANGE` - Get a range of elements from a list
+* `LLEN` - Get the length of a list
+* `LPOP` - Remove and get the first N elements from a list
