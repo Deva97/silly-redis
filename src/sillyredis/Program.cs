@@ -5,9 +5,10 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Buffers;
 using System.Collections.Concurrent;
+using Microsoft.Win32;
 
 
-var registery = new ConcurrentDictionary<string, CachedValue>();
+var registery = new ConcurrentDictionary<string, CachedValue<object>>();
 var ipAddress = IPAddress.Parse("127.0.0.1");
 var server = new TcpListener(ipAddress, 6379);
 server.Start();
@@ -35,14 +36,47 @@ string EncodeBulkString(string[] args)
 //Response based on command
 string Response(string[] args)
 {
-    return args[0].ToUpper() switch
+    var command = args[0].ToUpper();
+    return command switch
     {
         "PING" => "+PONG\r\n",
         "ECHO" => EncodeBulkString(args[1..]),
         "SET" => setCachedValue(args[1..]),
-        "GET" => getCachedValue(args[1]) != null ? EncodeBulkString(new string[] { getCachedValue(args[1]).Value }) : "$-1\r\n",
+        "GET" => GetCachedResponse(args[1]),
+        "RPUSH" => CreateOrAppendList(args[1], args[2..], 0).ToString() + "\r\n",
+        "LPUSH" => CreateOrAppendList(args[1], args[2..], 1).ToString() + "\r\n",
+        "LRANGE" => EncodeBulkString(getList(args)),
+        "LLEN" => ListLength(args[1]).ToString() + "\r\n",
+        "LPOP" => RemoveElementList(args[1], args.Length > 2 ? int.Parse(args[2]) : 1),
         _ => "-ERR unknown command\r\n"
     };
+}
+
+string RemoveElementList(string key, int count = 1)
+{
+    if (registery.TryGetValue(key, out var existingValue) && existingValue.Value is List<string> existingList)
+    {
+        var elements = existingList.Take(Math.Min(count, existingList.Count)).ToList();
+        existingList.RemoveRange(0, elements.Count);
+        registery.AddOrUpdate(key, new CachedValue<object>(existingList, DateTime.MaxValue), (k, v) => new CachedValue<object>(existingList, DateTime.MaxValue));
+        return string.Join("\r\n", elements) + "\r\n";
+    }
+    return "null\r\n"; // Return null if list not found
+}
+
+int ListLength(string key)
+{
+    if (registery.TryGetValue(key, out var existingValue) && existingValue.Value is List<string> existingList)
+    {
+        return existingList.Count;
+    }
+    return 0; // Return 0 if list not found
+}
+
+string GetCachedResponse(string key)
+{
+    var cached = getCachedValue(key);
+    return cached != null ? EncodeBulkString(new string[] { cached.Value?.ToString() ?? string.Empty }) : "$-1\r\n";
 }
 
 //Parse RESP protocol request
@@ -132,7 +166,7 @@ async Task HandleClientAsync(TcpClient client, CancellationToken token)
     var value = args[1];
     if(args.Length < 4)
     {
-        registery[key] = new CachedValue(value, DateTime.MaxValue);
+        registery[key] = new CachedValue<object>(value, DateTime.MaxValue);
         return success; // Key set successfully without expiration
     }
 
@@ -143,19 +177,16 @@ async Task HandleClientAsync(TcpClient client, CancellationToken token)
     var expiry = DateTime.UtcNow.AddMilliseconds(ttl);
     if(registery.TryGetValue(key, out var existingValue))
     {
-        if(existingValue is CachedValue existingCachedValue)
+        if(existingValue.Expiry > DateTime.UtcNow)
         {
-            if(existingCachedValue.Expiry > DateTime.UtcNow)
-            {
-                return error; // Key exists and is not expired
-            }
+            return error; // Key exists and is not expired
         }
     }
-    registery[key] = new CachedValue(value, expiry);
+    registery[key] = new CachedValue<object>(value, expiry);
     return success; // Key set successfully
 }
 
-CachedValue getCachedValue(string key)
+CachedValue<object>? getCachedValue(string key)
 {
     if(registery.TryGetValue(key, out var existingValue))
     {
@@ -173,11 +204,52 @@ CachedValue getCachedValue(string key)
     return null; // Key does not exist
 }
 
-public class CachedValue
+// Add List to the registry
+
+int CreateOrAppendList(string key, string[] value, int reverted)
 {
-    public string Value { get; set; }
+    if(reverted == 1)
+    {
+        Array.Reverse(value);
+    }
+
+    var list = registery.TryGetValue(key, out var existingValue) && existingValue.Value is List<string> existingList
+        ? existingList
+        : new List<string>();
+        lock (list)
+        {
+            list.AddRange(value);
+            registery.AddOrUpdate(key, new CachedValue<object>(list, DateTime.MaxValue), (k, v) => new CachedValue<object>(list, DateTime.MaxValue));
+            return list.Count; // Return the new length of the list
+        }
+}
+
+string[] getList(string[] args)
+{
+    // Implementation for retrieving a range of items from a list
+    var key = args[1];
+    var start = int.Parse(args[2]);
+    var end = int.Parse(args[3]);
+
+    if (registery.TryGetValue(key, out var existingValue) && existingValue.Value is List<string> existingList)
+    {
+        if(start < 0) start = existingList.Count + start;
+        if(end < 0) end = existingList.Count + end;
+
+        lock (existingList)
+        {
+            return existingList.GetRange(start, Math.Min(end - start +1 , existingList.Count)).ToArray();
+        }
+    }
+
+    return []; // Return empty array if list not found
+}
+
+public class CachedValue<T>
+{
+    public T Value { get; set; }
     public DateTime Expiry { get; set; }
-    public CachedValue(string value, DateTime expiry)
+    public CachedValue(T value, DateTime expiry)
     {
         Value = value;
         Expiry = expiry;

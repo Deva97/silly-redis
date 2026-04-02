@@ -58,7 +58,7 @@ async Task ClientWorker(int clientId)
 
         for (int req = 1; req <= requestsPerClient; req++)
         {
-            var message = "SET" + $" {rand.Next(1,100)} {rand.Next(1,100)}" + $" EX {rand.Next(1,10)}"; // Random SET command with expiry
+            var message = "RPUSH" + $" random_list{rand.Next(1,100)}" + $" {rand.Next(1,100)}"; // Random RPUSH command with expiry
             var messageBytes = Encoding.UTF8.GetBytes(EncodeBulkString(message.Split(' ')));
             await stream.WriteAsync(messageBytes, token);
             await stream.FlushAsync(token);
