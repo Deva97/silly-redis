@@ -10,15 +10,16 @@ namespace SillyRedis
             return $"${element.Length}\r\n{element}\r\n";
         }
 
-        //Parse RESP protocol request
-        public static string ParseResp(string request)
+        // Parse RESP protocol request into command arguments
+        public static string[] ParseResp(string request)
         {
-                var lines = request.Split("\r\n", StringSplitOptions.RemoveEmptyEntries).
-                Where(lines => !(lines.StartsWith('$') || lines.StartsWith('*'))).
-                Select(lines => lines.Trim());
-
-                return string.Join(' ', lines);
+            return [.. request.Split("\r\n", StringSplitOptions.RemoveEmptyEntries)
+                .Where(line => !(line.StartsWith('$') || line.StartsWith('*')))
+                .Select(line => line.Trim())];
         }
+
+        // Null Bulk String (e.g. key not found)
+        public static string EncodeNullBulkString() => "$-1\r\n";
 
         //Simple String
         public static string EncodeSimpleString(string message)

@@ -26,7 +26,7 @@ string Response(string[] args)
     var command = args[0].ToUpper();
     return command switch
     {
-        "PING" => "+PONG\r\n",
+        "PING" => RESProtocol.EncodeSimpleString("PONG"),
         "ECHO" => RESProtocol.EncodeSimpleString(string.Join(' ', args[1..])),
         "SET" => setCachedValue(args[1..]),
         "GET" => GetCachedResponse(args[1]),
@@ -35,7 +35,7 @@ string Response(string[] args)
         "LRANGE" => RESProtocol.EncodeArray(getList(args)),
         "LLEN" => RESProtocol.EncodeInteger(ListLength(args[1])),
         "LPOP" => RemoveElementList(args[1], args.Length > 2 ? int.Parse(args[2]) : 1),
-        _ => "-ERR unknown command\r\n"
+        _ => RESProtocol.EncodeError("ERR unknown command")
     };
 }
 
@@ -48,9 +48,11 @@ string RemoveElementList(string key, int count = 1)
             int removeCount = Math.Min(count, existingList.Count);
             var elements = existingList.GetRange(0, removeCount);
             existingList.RemoveRange(0, removeCount);
-            return string.Join("\r\n", elements) + "\r\n";
+            return count == 1
+                ? RESProtocol.EncodeBulkString(elements[0])
+                : RESProtocol.EncodeArray([.. elements]);
         }
-        return "null\r\n";
+        return count == 1 ? RESProtocol.EncodeNullBulkString() : RESProtocol.EncodeArray([]);
     }
 }
 
@@ -69,7 +71,7 @@ int ListLength(string key)
 string GetCachedResponse(string key)
 {
     var cached = getCachedValue(key);
-    return cached != null ? RESProtocol.EncodeSimpleString(cached.Value?.ToString() ?? string.Empty) : "$-1\r\n";
+    return cached != null ? RESProtocol.EncodeBulkString(cached.Value?.ToString() ?? string.Empty) : RESProtocol.EncodeNullBulkString();
 }
 
 try
@@ -114,11 +116,11 @@ async Task HandleClientAsync(TcpClient client, CancellationToken token)
 
             // Read request and respond with PONG
             var request = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-            var decodedRequest = RESProtocol.ParseResp(request);
-            Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Received: {decodedRequest}");
+            var args = RESProtocol.ParseResp(request);
+            Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Received: {string.Join(' ', args)}");
 
-            //respind to client
-            var message = Response(decodedRequest.Split(' '));
+            //respond to client
+            var message = Response(args);
             var messageBytes = Encoding.UTF8.GetBytes(message);
             await stream.WriteAsync(messageBytes, token);
             await stream.FlushAsync(token);
@@ -143,8 +145,8 @@ async Task HandleClientAsync(TcpClient client, CancellationToken token)
 
 string setCachedValue(string[] args)
 {
-    string success = "Key set successfully\r\n";
-    string error = "Key already exists and is not expired\r\n";
+    string success = RESProtocol.EncodeSimpleString("OK");
+    string error = RESProtocol.EncodeError("ERR key already exists and is not expired");
     var key = args[0];
     var value = args[1];
 
