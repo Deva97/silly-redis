@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Buffers;
 using System.Collections.Concurrent;
+using SillyRedis;
 
 var registery = new ConcurrentDictionary<string, CachedValue<object>>();
 // Per-key lock objects — acquired before any read-modify-write on a key's value.
@@ -17,18 +18,7 @@ var token = source.Token;
 
 object GetKeyLock(string key) => keyLocks.GetOrAdd(key, _ => new object());
 
-//Ecode Bulk String for RESP protocol
-string EncodeBulkString(string[] args)
-{
-    var sb = new StringBuilder();
-    sb.Append($"*{args.Length}\r\n");
-    foreach (var arg in args)
-    {
-        sb.Append($"${arg.Length}\r\n{arg}\r\n");
-    }
 
-    return sb.ToString();
-}
 
 //Response based on command
 string Response(string[] args)
@@ -37,13 +27,13 @@ string Response(string[] args)
     return command switch
     {
         "PING" => "+PONG\r\n",
-        "ECHO" => EncodeBulkString(args[1..]),
+        "ECHO" => RESProtocol.EncodeSimpleString(string.Join(' ', args[1..])),
         "SET" => setCachedValue(args[1..]),
         "GET" => GetCachedResponse(args[1]),
-        "RPUSH" => CreateOrAppendList(args[1], args[2..], 0).ToString() + "\r\n",
-        "LPUSH" => CreateOrAppendList(args[1], args[2..], 1).ToString() + "\r\n",
-        "LRANGE" => EncodeBulkString(getList(args)),
-        "LLEN" => ListLength(args[1]).ToString() + "\r\n",
+        "RPUSH" => RESProtocol.EncodeInteger(CreateOrAppendList(args[1], args[2..], 0)),
+        "LPUSH" => RESProtocol.EncodeInteger(CreateOrAppendList(args[1], args[2..], 1)),
+        "LRANGE" => RESProtocol.EncodeArray(getList(args)),
+        "LLEN" => RESProtocol.EncodeInteger(ListLength(args[1])),
         "LPOP" => RemoveElementList(args[1], args.Length > 2 ? int.Parse(args[2]) : 1),
         _ => "-ERR unknown command\r\n"
     };
@@ -79,17 +69,7 @@ int ListLength(string key)
 string GetCachedResponse(string key)
 {
     var cached = getCachedValue(key);
-    return cached != null ? EncodeBulkString(new string[] { cached.Value?.ToString() ?? string.Empty }) : "$-1\r\n";
-}
-
-//Parse RESP protocol request
-string ParseResp(string request)
-{
-    var lines = request.Split("\r\n", StringSplitOptions.RemoveEmptyEntries).
-                Where(lines => !(lines.StartsWith('$') || lines.StartsWith('*'))).
-                Select(lines => lines.Trim());
-
-    return string.Join(' ', lines);
+    return cached != null ? RESProtocol.EncodeSimpleString(cached.Value?.ToString() ?? string.Empty) : "$-1\r\n";
 }
 
 try
@@ -134,7 +114,7 @@ async Task HandleClientAsync(TcpClient client, CancellationToken token)
 
             // Read request and respond with PONG
             var request = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-            var decodedRequest = ParseResp(request);
+            var decodedRequest = RESProtocol.ParseResp(request);
             Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Received: {decodedRequest}");
 
             //respind to client
