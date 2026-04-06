@@ -4,6 +4,7 @@ using System.Text;
 using System.Buffers;
 using System.Collections.Concurrent;
 using SillyRedis;
+using SillyRedis.DataStructures;
 
 var registery = new ConcurrentDictionary<string, CachedValue<object>>();
 // Per-key lock objects — acquired before any read-modify-write on a key's value.
@@ -18,7 +19,7 @@ var token = source.Token;
 
 object GetKeyLock(string key) => keyLocks.GetOrAdd(key, _ => new object());
 
-
+var redisList = new RedisList(registery, GetKeyLock);
 
 //Response based on command
 string Response(string[] args)
@@ -30,43 +31,15 @@ string Response(string[] args)
         "ECHO" => RESProtocol.EncodeSimpleString(string.Join(' ', args[1..])),
         "SET" => setCachedValue(args[1..]),
         "GET" => GetCachedResponse(args[1]),
-        "RPUSH" => RESProtocol.EncodeInteger(CreateOrAppendList(args[1], args[2..], 0)),
-        "LPUSH" => RESProtocol.EncodeInteger(CreateOrAppendList(args[1], args[2..], 1)),
-        "LRANGE" => RESProtocol.EncodeArray(getList(args)),
-        "LLEN" => RESProtocol.EncodeInteger(ListLength(args[1])),
-        "LPOP" => RemoveElementList(args[1], args.Length > 2 ? int.Parse(args[2]) : 1),
+        "RPUSH" => RESProtocol.EncodeInteger(redisList.CreateOrAppend(args[1], args[2..], 0)),
+        "LPUSH" => RESProtocol.EncodeInteger(redisList.CreateOrAppend(args[1], args[2..], 1)),
+        "LRANGE" => RESProtocol.EncodeArray(redisList.Range(args[1], int.Parse(args[2]), int.Parse(args[3]))),
+        "LLEN" => RESProtocol.EncodeInteger(redisList.Length(args[1])),
+        "LPOP" => redisList.Pop(args[1], args.Length > 2 ? int.Parse(args[2]) : 1),
         _ => RESProtocol.EncodeError("ERR unknown command")
     };
 }
 
-string RemoveElementList(string key, int count = 1)
-{
-    lock (GetKeyLock(key))
-    {
-        if (registery.TryGetValue(key, out var existingValue) && existingValue.Value is List<string> existingList)
-        {
-            int removeCount = Math.Min(count, existingList.Count);
-            var elements = existingList.GetRange(0, removeCount);
-            existingList.RemoveRange(0, removeCount);
-            return count == 1
-                ? RESProtocol.EncodeBulkString(elements[0])
-                : RESProtocol.EncodeArray([.. elements]);
-        }
-        return count == 1 ? RESProtocol.EncodeNullBulkString() : RESProtocol.EncodeArray([]);
-    }
-}
-
-int ListLength(string key)
-{
-    lock (GetKeyLock(key))
-    {
-        if (registery.TryGetValue(key, out var existingValue) && existingValue.Value is List<string> existingList)
-        {
-            return existingList.Count;
-        }
-        return 0;
-    }
-}
 
 string GetCachedResponse(string key)
 {
@@ -188,56 +161,6 @@ CachedValue<object>? getCachedValue(string key)
     return null;
 }
 
-// Add List to the registry
-//need to look into the logic.
-int CreateOrAppendList(string key, string[] value, int reverted)
-{
-    if (reverted == 1) Array.Reverse(value);
-
-    // Acquire the per-key lock before the lookup so that the check-then-create
-    // is atomic. Without this, two threads can both see a missing key, each
-    // create their own List<string>, and then race on AddOrUpdate — losing one
-    // thread's items entirely.
-    lock (GetKeyLock(key))
-    {
-        List<string> list;
-        if (registery.TryGetValue(key, out var existingValue) && existingValue.Value is List<string> existingList)
-        {
-            list = existingList;
-        }
-        else
-        {
-            list = [];
-            registery[key] = new CachedValue<object>(list, DateTime.MaxValue);
-        }
-        list.AddRange(value);
-        return list.Count;
-    }
-}
-
-string[] getList(string[] args)
-{
-    var key = args[1];
-    var start = int.Parse(args[2]);
-    var end = int.Parse(args[3]);
-
-    lock (GetKeyLock(key))
-    {
-        if (registery.TryGetValue(key, out var existingValue) && existingValue.Value is List<string> existingList)
-        {
-            // Resolve negative indices inside the lock so Count is stable.
-            int count = existingList.Count;
-            if (start < 0) start = count + start;
-            if (end < 0) end = count + end;
-            start = Math.Max(0, start);
-            end = Math.Min(count - 1, end);
-            if (start > end) return [];
-            return [.. existingList.GetRange(start, end - start + 1)];
-        }
-    }
-
-    return [];
-}
 
 public class CachedValue<T>
 {
