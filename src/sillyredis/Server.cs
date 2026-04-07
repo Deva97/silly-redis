@@ -64,19 +64,19 @@ namespace SillyRedis
                 var bytesRead = await stream.ReadAsync(buffer, token);
                 if (bytesRead == 0) return null;
 
-                accumulator.Write(buffer, 0, bytesRead);
+                accumulator.Write(buffer.AsSpan(0, bytesRead));
 
-                var data = accumulator.ToArray();
-                if (IsCompleteRespMessage(data))
+                ReadOnlySpan<byte> accumulated = accumulator.GetBuffer().AsSpan(0, (int)accumulator.Length);
+                if (IsCompleteRespMessage(accumulated))
                 {
-                    var request = Encoding.UTF8.GetString(data).Trim();
+                    var request = Encoding.UTF8.GetString(accumulated).Trim();
                     return RESProtocol.ParseResp(request);
                 }
             }
         }
 
         // Each *N contributes 1 \r\n; each $M (bulk string) contributes 2 (\r\n for header + data)
-        static bool IsCompleteRespMessage(byte[] data)
+        static bool IsCompleteRespMessage(ReadOnlySpan<byte> data)
         {
             var text = Encoding.UTF8.GetString(data);
             var lines = text.Split("\r\n");
