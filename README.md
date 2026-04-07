@@ -12,7 +12,9 @@ The implementation was developed incrementally by following a structured, hands-
 Key reference:
 
 * https://app.codecrafters.io/
-* https://rohitpaulk.com/articles/redis-0
+* https://arpitbhayani.me/redis-internals/
+* https://build-your-own.org/redis/
+
 
 ## Goals
 

@@ -4,20 +4,37 @@ using System.Collections.Concurrent;
 using SillyRedis;
 using SillyRedis.DataStructures;
 
-var registery = new ConcurrentDictionary<string, CachedValue<object>>();
-// Per-key lock objects — acquired before any read-modify-write on a key's value.
-var keyLocks = new ConcurrentDictionary<string, object>();
-
-var ipAddress = IPAddress.Parse("127.0.0.1");
-var listener = new TcpListener(ipAddress, 6379);
-listener.Start();
 
 var source = new CancellationTokenSource();
 var token = source.Token;
 
+
+var registery = new ConcurrentDictionary<string, CachedValue<object>>();
+var keyLocks = new ConcurrentDictionary<string, object>(); // Per-key lock objects — acquired before any read-modify-write on a key's value.
 object GetKeyLock(string key) => keyLocks.GetOrAdd(key, _ => new object());
 
+var ipAddress = IPAddress.Parse("127.0.0.1");    //binding to localhost, so the server is only accessible from the local machine.
+var listener = new TcpListener(ipAddress, 6379); //prot binding to 6379, the default Redis port
+listener.Start(); //start listening for incoming connections
+
 var redisList = new RedisList(registery, GetKeyLock);
+
+var server = new Server(listener, Response); //create a new instance of the Server class, passing the TcpListener and the Response function as parameters.
+
+try
+{
+    await server.RunAsync(token);
+}
+catch(Exception e)
+{
+    Console.WriteLine($"Server stopped: {e.Message}");
+}
+finally
+{
+    source.Cancel();
+    listener.Stop();
+    System.Console.WriteLine("Server stopped.");
+}
 
 //Response based on command
 string Response(string[] args)
@@ -38,30 +55,11 @@ string Response(string[] args)
     };
 }
 
-
 string GetCachedResponse(string key)
 {
     var cached = getCachedValue(key);
     return cached != null ? RESProtocol.EncodeBulkString(cached.Value?.ToString() ?? string.Empty) : RESProtocol.EncodeNullBulkString();
 }
-
-var server = new Server(listener, Response);
-
-try
-{
-    await server.RunAsync(token);
-}
-catch(Exception e)
-{
-    Console.WriteLine($"Server stopped: {e.Message}");
-}
-finally
-{
-    source.Cancel();
-    listener.Stop();
-    System.Console.WriteLine("Server stopped.");
-}
-
 
 string setCachedValue(string[] args)
 {

@@ -4,22 +4,13 @@ using System.Text;
 
 namespace SillyRedis
 {
-    public class Server
+    public class Server(TcpListener listener, Func<string[], string> response)
     {
-        private readonly TcpListener _listener;
-        private readonly Func<string[], string> _response;
-
-        public Server(TcpListener listener, Func<string[], string> response)
-        {
-            _listener = listener;
-            _response = response;
-        }
-
         public async Task RunAsync(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
             {
-                var acceptClient = await _listener.AcceptTcpClientAsync(token);
+                var acceptClient = await listener.AcceptTcpClientAsync(token);
 
                 //fire and forget. not using await her since waiting make the system to
                 // to behave in such a way that it can handle only one client at a time.
@@ -39,19 +30,13 @@ namespace SillyRedis
 
                 while (!token.IsCancellationRequested)
                 {
-                    // Read request and break if client disconnected
-                    var bytesRead = await stream.ReadAsync(buffer, token);
-                    if (bytesRead == 0) break;
+                    var args = await ReadRequestAsync(stream, buffer, token);
+                    if (args == null) break;
 
-                    var request = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-                    var args = RESProtocol.ParseResp(request);
                     Console.WriteLine($"[Client {client.Client.RemoteEndPoint}] Received: {string.Join(' ', args)}");
 
-                    //respond to client
-                    var message = _response(args);
-                    var messageBytes = Encoding.UTF8.GetBytes(message);
-                    await stream.WriteAsync(messageBytes, token);
-                    await stream.FlushAsync(token);
+                    var message = response(args);
+                    await WriteResponseAsync(stream, message, token);
                 }
             }
             catch (Exception e)
@@ -65,9 +50,53 @@ namespace SillyRedis
                 if (buffer != null)
                 {
                     ArrayPool<byte>.Shared.Return(buffer);
-                    buffer = null;
                 }
             }
+        }
+
+        // Returns parsed args, or null if the client disconnected.
+        static async Task<string[]?> ReadRequestAsync(NetworkStream stream, byte[] buffer, CancellationToken token)
+        {
+            using var accumulator = new MemoryStream();
+
+            while (true)
+            {
+                var bytesRead = await stream.ReadAsync(buffer, token);
+                if (bytesRead == 0) return null;
+
+                accumulator.Write(buffer, 0, bytesRead);
+
+                var data = accumulator.ToArray();
+                if (IsCompleteRespMessage(data))
+                {
+                    var request = Encoding.UTF8.GetString(data).Trim();
+                    return RESProtocol.ParseResp(request);
+                }
+            }
+        }
+
+        // Each *N contributes 1 \r\n; each $M (bulk string) contributes 2 (\r\n for header + data)
+        static bool IsCompleteRespMessage(byte[] data)
+        {
+            var text = Encoding.UTF8.GetString(data);
+            var lines = text.Split("\r\n");
+
+            int starCount   = lines.Count(l => l.StartsWith('*'));
+            int dollarCount = lines.Count(l => l.StartsWith('$'));
+
+            if (starCount == 0) return false;
+
+            int expectedCrLf = starCount + dollarCount * 2;
+            int actualCrLf   = lines.Length - 1;
+
+            return actualCrLf >= expectedCrLf;
+        }
+
+        static async Task WriteResponseAsync(NetworkStream stream, string message, CancellationToken token)
+        {
+            var messageBytes = Encoding.UTF8.GetBytes(message);
+            await stream.WriteAsync(messageBytes, token);
+            await stream.FlushAsync(token);
         }
     }
 }
