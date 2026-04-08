@@ -51,6 +51,7 @@ string Response(string[] args)
         "LRANGE" => RESProtocol.EncodeArray(redisList.Range(args[1], int.Parse(args[2]), int.Parse(args[3]))),
         "LLEN" => RESProtocol.EncodeInteger(redisList.Length(args[1])),
         "LPOP" => redisList.Pop(args[1], args.Length > 2 ? int.Parse(args[2]) : 1),
+        "BLPOP" => redisList.BlockingPop(args[1..^1], float.Parse(args[^1]), token),
         _ => RESProtocol.EncodeError("ERR unknown command")
     };
 }

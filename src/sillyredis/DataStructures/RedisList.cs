@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace SillyRedis.DataStructures
 {
@@ -79,6 +80,43 @@ namespace SillyRedis.DataStructures
                 }
                 return count == 1 ? RESProtocol.EncodeNullBulkString() : RESProtocol.EncodeArray([]);
             }
+        }
+
+        // Blocks until an element is available in any of the given keys, or timeout elapses.
+        // timeout=0 means block indefinitely. Returns a 2-element array [key, element], or null bulk string on timeout/cancellation.
+        public string BlockingPop(string[] keys, float timeout, CancellationToken cancellationToken = default)
+        {
+            Stopwatch stopwatch = new();
+            stopwatch.Start();
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                foreach (var key in keys)
+                {
+                    lock (_getKeyLock(key))
+                    {
+                        if (_registry.TryGetValue(key, out var existing) && existing.Value is List<string> list && list.Count > 0)
+                        {
+                            var element = list[0];
+                            list.RemoveAt(0);
+                            return RESProtocol.EncodeArray([key, element]);
+                        }
+                    }
+                }
+
+                if (timeout > 0)
+                {
+                    double remaining = timeout - stopwatch.Elapsed.TotalSeconds;
+                    if (remaining <= 0) return RESProtocol.EncodeNullBulkString();
+                    Thread.Sleep((int)Math.Min(100, remaining * 1000));
+                }
+                else
+                {
+                    Thread.Sleep(100);
+                }
+            }
+
+            return RESProtocol.EncodeNullBulkString();
         }
     }
 }
