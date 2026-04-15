@@ -37,3 +37,7 @@ Key reference:
 * `LRANGE` - Get a range of elements from a list
 * `LLEN` - Get the length of a list
 * `LPOP` - Remove and get the first N elements from a list
+* `BLPOP` - Blocking left pop; blocks until an element is available or timeout elapses
+
+### Introspection
+* `TYPE` - Returns the type of the value stored at a key (`string`, `list`, `set`, `zset`, `hash`, `stream`, `vectorset`, or `none`)
