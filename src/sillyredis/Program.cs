@@ -53,7 +53,7 @@ string Response(string[] args)
         "LLEN" => RESProtocol.EncodeInteger(redisList.Length(args[1])),
         "LPOP" => redisList.Pop(args[1], args.Length > 2 ? int.Parse(args[2]) : 1),
         "BLPOP" => redisList.BlockingPop(args[1..^1], float.Parse(args[^1]), token),
-        "TYPE" => TypeCachedValue(args[1]) is Type type ? RESProtocol.EncodeSimpleString($"{type}") : RESProtocol.EncodeSimpleString("none"),
+        "TYPE" => RESProtocol.EncodeSimpleString(TypeCachedValue(args[1]) ?? "none"),
         _ => RESProtocol.EncodeError("ERR unknown command")
     };
 }
@@ -109,13 +109,23 @@ CachedValue<object>? getCachedValue(string key)
     return null;
 }
 
-Type? TypeCachedValue(string key)
+string? TypeCachedValue(string key)
 {
     if (registery.TryGetValue(key, out var existingValue))
     {
         if (existingValue.Expiry > DateTime.UtcNow)
         {
-            return existingValue.Value.GetType();
+            return existingValue.Value switch
+            {
+                string                           => "string",
+                List<string>                     => "list",
+                HashSet<string>                  => "set",
+                SortedSet<(double, string)>      => "zset",
+                Dictionary<string, string>       => "hash",
+                Queue<Dictionary<string,string>> => "stream",
+                Dictionary<string, float[]>      => "vectorset",
+                _                                => null
+            };
         }
     }
     return null;
