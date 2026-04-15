@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Collections.Concurrent;
 using SillyRedis;
 using SillyRedis.DataStructures;
+using Microsoft.Win32;
 
 
 var source = new CancellationTokenSource();
@@ -52,6 +53,7 @@ string Response(string[] args)
         "LLEN" => RESProtocol.EncodeInteger(redisList.Length(args[1])),
         "LPOP" => redisList.Pop(args[1], args.Length > 2 ? int.Parse(args[2]) : 1),
         "BLPOP" => redisList.BlockingPop(args[1..^1], float.Parse(args[^1]), token),
+        "TYPE" => TypeCachedValue(args[1]) is Type type ? RESProtocol.EncodeSimpleString($"{type}") : RESProtocol.EncodeSimpleString("none"),
         _ => RESProtocol.EncodeError("ERR unknown command")
     };
 }
@@ -106,6 +108,18 @@ CachedValue<object>? getCachedValue(string key)
     }
     return null;
 }
+
+Type? TypeCachedValue(string key)
+{
+    if (registery.TryGetValue(key, out var existingValue))
+    {
+        if (existingValue.Expiry > DateTime.UtcNow)
+        {
+            return existingValue.Value.GetType();
+        }
+    }
+    return null;
+}   
 
 
 public class CachedValue<T>

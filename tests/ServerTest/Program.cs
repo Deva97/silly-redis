@@ -230,6 +230,34 @@ async Task RunSequentialTests()
 
         client.Close();
     }
+
+    // ── 12. TYPE ─────────────────────────────────────────────────────────────
+    Console.WriteLine("\n[TYPE]");
+    {
+        var (client, stream) = Connect();
+
+        // non-existent key → "none"
+        var none = await SendAndReceive(stream, ["TYPE", "type_no_such_key"]);
+        Assert(none == "+none\r\n", "TYPE on non-existent key returns none");
+
+        // string key
+        await SendAndReceive(stream, ["SET", "type_str_key", "hello"]);
+        var strType = await SendAndReceive(stream, ["TYPE", "type_str_key"]);
+        Assert(strType == "+System.String\r\n", "TYPE on string key returns System.String");
+
+        // list key
+        await SendAndReceive(stream, ["RPUSH", "type_list_key", "a", "b"]);
+        var listType = await SendAndReceive(stream, ["TYPE", "type_list_key"]);
+        Assert(listType == "+System.Collections.Generic.List`1[System.String]\r\n", "TYPE on list key returns List type");
+
+        // expired key → "none"
+        await SendAndReceive(stream, ["SET", "type_exp_key", "val", "PX", "100"]);
+        await Task.Delay(200);
+        var expiredType = await SendAndReceive(stream, ["TYPE", "type_exp_key"]);
+        Assert(expiredType == "+none\r\n", "TYPE on expired key returns none");
+
+        client.Close();
+    }
 }
 
 // ── Concurrency Tests ─────────────────────────────────────────────────────────

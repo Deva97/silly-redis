@@ -69,7 +69,7 @@ namespace SillyRedis.DataStructures
         {
             lock (_getKeyLock(key))
             {
-                if (_registry.TryGetValue(key, out var existingValue) && existingValue.Value is List<string> existingList)
+                if (_registry.TryGetValue(key, out var existingValue) && existingValue.Value is List<string> existingList && existingList.Count > 0)
                 {
                     int removeCount = Math.Min(count, existingList.Count);
                     var elements = existingList.GetRange(0, removeCount);
