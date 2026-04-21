@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/sillyredis/sillyredis.csproj" />
+    <Project Path="src/sillyredis-mcp/sillyredis-mcp.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ServerTest/ServerTest.csproj" />
